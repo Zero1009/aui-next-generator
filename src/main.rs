@@ -54,18 +54,30 @@ fn main() -> Result<()> {
         }
     };
 
-    let install_deps = if args.skip_install {
-        false
+    let (install_deps, use_turbo) = if args.skip_install {
+        (false, false)
     } else {
+        check_node_version()?;
         check_and_install_pnpm()?;
 
-        Confirm::new()
+        let install = Confirm::new()
             .with_prompt("📦 Install project dependencies")
             .default(true)
-            .interact()?
+            .interact()?;
+
+        let turbo = if install {
+            Confirm::new()
+                .with_prompt("🚀 Use Turbopack for faster development")
+                .default(true)
+                .interact()?
+        } else {
+            false
+        };
+
+        (install, turbo)
     };
 
-    generate_project(&project_name, install_deps)?;
+    generate_project(&project_name, install_deps, use_turbo)?;
 
     println!("\n{}", "🎉 Project created successfully!".green().bold());
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".green());
@@ -78,6 +90,46 @@ fn main() -> Result<()> {
     println!("\n🌐 Then open http://localhost:3000");
 
     Ok(())
+}
+
+fn check_node_version() -> Result<()> {
+    let output = Command::new("node")
+        .arg("--version")
+        .output()?;
+
+    if !output.status.success() {
+        anyhow::bail!("Node.js is not installed or not in PATH");
+    }
+
+    let version_output = String::from_utf8_lossy(&output.stdout);
+    let version_str = version_output.trim().strip_prefix('v').unwrap_or(&version_output.trim());
+    
+    // Parse major and minor version
+    let parts: Vec<&str> = version_str.split('.').collect();
+    if parts.len() < 2 {
+        anyhow::bail!("Could not parse Node.js version: {}", version_str);
+    }
+
+    let major: u32 = parts[0].parse().map_err(|_| anyhow::anyhow!("Invalid major version"))?;
+    let minor: u32 = parts[1].parse().map_err(|_| anyhow::anyhow!("Invalid minor version"))?;
+
+    // Next.js 15 requires Node.js 18.18.0+
+    let required_major = 18;
+    let required_minor = 18;
+
+    if major > required_major || (major == required_major && minor >= required_minor) {
+        println!("✅ Node.js {} (compatible)", version_str);
+        Ok(())
+    } else {
+        println!("{}", "❌ Node.js version is too old".red());
+        println!("   Current: v{}", version_str);
+        println!("   Required: v{}.{}.0 or higher", required_major, required_minor);
+        println!();
+        println!("Please update Node.js:");
+        println!("   https://nodejs.org/");
+        println!("   # or use a version manager like nvm");
+        anyhow::bail!("Node.js version {} is not supported", version_str);
+    }
 }
 
 fn check_and_install_pnpm() -> Result<()> {
@@ -130,7 +182,7 @@ fn install_pnpm_global() -> Result<()> {
     Ok(())
 }
 
-fn generate_project(name: &str, install_deps: bool) -> Result<()> {
+fn generate_project(name: &str, install_deps: bool, use_turbo: bool) -> Result<()> {
     let project_path = Path::new(name);
 
     if project_path.exists() {
@@ -142,7 +194,7 @@ fn generate_project(name: &str, install_deps: bool) -> Result<()> {
 
     create_directories(project_path)?;
 
-    create_files(project_path, name)?;
+    create_files(project_path, name, use_turbo)?;
 
     if install_deps {
         install_dependencies_with_pnpm(project_path)?;
@@ -163,10 +215,10 @@ fn create_directories(project_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn create_files(project_path: &Path, project_name: &str) -> Result<()> {
+fn create_files(project_path: &Path, project_name: &str, use_turbo: bool) -> Result<()> {
     println!("{}", "📝 Creating project files...".blue());
 
-    create_package_json(project_path, project_name)?;
+    create_package_json(project_path, project_name, use_turbo)?;
     create_tsconfig(project_path)?;
     create_postcss_config(project_path)?;
     create_next_config(project_path)?;
@@ -202,35 +254,42 @@ fn install_dependencies_with_pnpm(project_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn create_package_json(project_path: &Path, name: &str) -> Result<()> {
+fn create_package_json(project_path: &Path, name: &str, use_turbo: bool) -> Result<()> {
+    let dev_script = if use_turbo {
+        "next dev --turbo"
+    } else {
+        "next dev"
+    };
+
     let content = format!(r#"{{
   "name": "{}",
   "version": "0.1.0",
   "private": true,
   "scripts": {{
-    "dev": "next dev",
+    "dev": "{}",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix"
   }},
   "dependencies": {{
-    "next": "^14.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }},
   "devDependencies": {{
     "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
-    "eslint": "^8.0.0",
-    "eslint-config-next": "^14.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
     "tailwindcss": "^4.0.0-alpha.31",
+    "@tailwindcss/postcss": "^4.0.0-alpha.31",
     "typescript": "^5.0.0",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0"
   }}
-}}"#, name);
+}}"#, name, dev_script);
 
     fs::write(project_path.join("package.json"), content)?;
     println!("   Created: {}", "package.json".green());
@@ -293,17 +352,22 @@ export default config;
 }
 
 fn create_next_config(project_path: &Path) -> Result<()> {
-    let content = r#"/** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    appDir: true,
+    let content = r#"import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+  typescript: {
+    ignoreBuildErrors: false,
   },
-}
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
+};
 
-module.exports = nextConfig"#;
+export default nextConfig;"#;
 
-    fs::write(project_path.join("next.config.js"), content)?;
-    println!("   Created: {}", "next.config.js".green());
+    fs::write(project_path.join("next.config.ts"), content)?;
+    println!("   Created: {}", "next.config.ts".green());
     Ok(())
 }
 
@@ -418,7 +482,7 @@ fn create_app_page(project_path: &Path, project_name: &str) -> Result<()> {
       <div className="mt-8 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-3 lg:text-left">
         <div className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100">
           <h2 className="mb-3 text-2xl font-semibold">
-            Next.js 14
+            Next.js 15
           </h2>
           <p className="m-0 max-w-[30ch] text-sm opacity-50">
             The React Framework for Production with App Router
@@ -574,7 +638,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Features
 
-- ⚡ Next.js 14 with App Router
+- ⚡ Next.js 15 with App Router
 - 🎨 Tailwind CSS for styling
 - 📝 TypeScript for type safety
 - 🔧 ESLint for code linting
