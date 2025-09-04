@@ -1,8 +1,8 @@
 [package]
 name = "aui-next-generator"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "CLI tool to generate Next.js projects with Tailwind CSS and ESLint"
+description = "CLI tool to generate Next.js projects with Tailwind CSS, TypeScript, ESLint, and optional React Query integration"
 license = "MIT"
 authors = ["theerakanzero@gmail.com"]
 repository = "https://github.com/Zero1009/aui-next-generator"
