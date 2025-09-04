@@ -1,11 +1,11 @@
 use aui_next_generator::*;
-use tempfile::TempDir;
 use std::fs;
 use std::path::Path;
+use tempfile::TempDir;
 
 /// Helper to create a test config
-fn create_test_config(name: &str, use_turbo: bool) -> ProjectConfig {
-    ProjectConfig::new(name.to_string(), false, use_turbo) // Skip deps for tests
+fn create_test_config(name: &str, use_turbo: bool, use_react_query: bool) -> ProjectConfig {
+    ProjectConfig::new(name.to_string(), false, use_turbo, use_react_query) // Skip deps for tests
 }
 
 // Helper function to generate project in a specific path (for testing)
@@ -26,10 +26,17 @@ fn generate_project_in_path(config: &ProjectConfig, path: &Path) -> anyhow::Resu
     aui_next_generator::create_eslint_config(path)?;
     aui_next_generator::create_gitignore(path)?;
     aui_next_generator::create_npmrc(path)?;
-    aui_next_generator::create_app_layout(path, &config.name)?;
+    aui_next_generator::create_app_layout(path, &config.name, config)?;
     aui_next_generator::create_app_page(path, &config.name)?;
     aui_next_generator::create_globals_css(path)?;
     aui_next_generator::create_button_component(path)?;
+
+    if config.use_react_query {
+        aui_next_generator::create_query_provider(path)?;
+        aui_next_generator::create_api_client(path)?;
+        aui_next_generator::create_example_hooks(path)?;
+    }
+
     aui_next_generator::create_readme(path, &config.name)?;
 
     Ok(())
@@ -38,7 +45,7 @@ fn generate_project_in_path(config: &ProjectConfig, path: &Path) -> anyhow::Resu
 #[test]
 fn test_complete_project_generation() {
     let temp = TempDir::new().unwrap();
-    let config = create_test_config("integration-test", false);
+    let config = create_test_config("integration-test", false, false);
     let project_path = temp.path().join(&config.name);
     fs::create_dir(&project_path).unwrap();
 
@@ -73,7 +80,7 @@ fn test_complete_project_generation() {
 #[test]
 fn test_project_generation_with_turbo() {
     let temp = TempDir::new().unwrap();
-    let config = create_test_config("turbo-test", true);
+    let config = create_test_config("turbo-test", true, false);
     let project_path = temp.path().join(&config.name);
     fs::create_dir(&project_path).unwrap();
 
@@ -88,7 +95,7 @@ fn test_project_generation_with_turbo() {
 #[test]
 fn test_project_generation_without_turbo() {
     let temp = TempDir::new().unwrap();
-    let config = create_test_config("no-turbo-test", false);
+    let config = create_test_config("no-turbo-test", false, false);
     let project_path = temp.path().join(&config.name);
     fs::create_dir(&project_path).unwrap();
 
@@ -104,7 +111,7 @@ fn test_project_generation_without_turbo() {
 #[test]
 fn test_generated_files_content() {
     let temp = TempDir::new().unwrap();
-    let config = create_test_config("content-test", false);
+    let config = create_test_config("content-test", false, false);
     let project_path = temp.path().join(&config.name);
     fs::create_dir(&project_path).unwrap();
 
@@ -143,7 +150,7 @@ fn test_generated_files_content() {
 #[test]
 fn test_directory_structure_creation() {
     let temp = TempDir::new().unwrap();
-    let config = create_test_config("structure-test", false);
+    let config = create_test_config("structure-test", false, false);
     let project_path = temp.path().join(&config.name);
     fs::create_dir(&project_path).unwrap();
 
@@ -165,7 +172,11 @@ fn test_directory_structure_creation() {
     ];
 
     for dir in expected_dirs.iter() {
-        assert!(project_path.join(dir).is_dir(), "Directory {} should exist", dir);
+        assert!(
+            project_path.join(dir).is_dir(),
+            "Directory {} should exist",
+            dir
+        );
     }
 }
 
@@ -173,7 +184,7 @@ fn test_directory_structure_creation() {
 fn test_existing_directory_error() {
     let temp = TempDir::new().unwrap();
     let project_name = "existing-test";
-    let config = create_test_config(project_name, false);
+    let config = create_test_config(project_name, false, false);
 
     // Create the directory first
     let existing_dir = temp.path().join(project_name);
@@ -192,4 +203,51 @@ fn test_existing_directory_error() {
 
     let error_msg = result.err().unwrap().to_string();
     assert!(error_msg.contains("already exists"));
+}
+
+#[test]
+fn test_project_generation_with_react_query() {
+    let temp = TempDir::new().unwrap();
+    let config = create_test_config("react-query-test", false, true);
+    let project_path = temp.path().join(&config.name);
+    fs::create_dir(&project_path).unwrap();
+
+    let result = generate_project_in_path(&config, &project_path);
+    assert!(result.is_ok());
+
+    // Check that React Query dependencies are in package.json
+    let package_content = fs::read_to_string(project_path.join("package.json")).unwrap();
+    assert!(package_content.contains("@tanstack/react-query"));
+    assert!(package_content.contains("@tanstack/react-query-devtools"));
+
+    // Check that React Query files were created
+    assert!(project_path.join("src/libs/query-provider.tsx").exists());
+    assert!(project_path.join("src/libs/api.ts").exists());
+    assert!(project_path.join("src/hooks/use-api.ts").exists());
+
+    // Check that layout includes QueryProvider
+    let layout_content = fs::read_to_string(project_path.join("src/app/layout.tsx")).unwrap();
+    assert!(layout_content.contains("import { QueryProvider }"));
+    assert!(layout_content.contains("<QueryProvider>"));
+    assert!(layout_content.contains("</QueryProvider>"));
+
+    // Check query provider content
+    let provider_content =
+        fs::read_to_string(project_path.join("src/libs/query-provider.tsx")).unwrap();
+    assert!(provider_content.contains("QueryClient"));
+    assert!(provider_content.contains("ReactQueryDevtools"));
+    assert!(provider_content.contains("staleTime: 60 * 1000"));
+
+    // Check API client content
+    let api_content = fs::read_to_string(project_path.join("src/libs/api.ts")).unwrap();
+    assert!(api_content.contains("ApiError"));
+    assert!(api_content.contains("apiRequest"));
+    assert!(api_content.contains("jsonplaceholder.typicode.com"));
+
+    // Check example hooks content
+    let hooks_content = fs::read_to_string(project_path.join("src/hooks/use-api.ts")).unwrap();
+    assert!(hooks_content.contains("useQuery"));
+    assert!(hooks_content.contains("useMutation"));
+    assert!(hooks_content.contains("usePosts"));
+    assert!(hooks_content.contains("useCreatePost"));
 }

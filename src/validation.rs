@@ -3,25 +3,30 @@ use colored::Colorize;
 use std::process::Command;
 
 pub fn check_node_version() -> Result<()> {
-    let output = Command::new("node")
-        .arg("--version")
-        .output()?;
+    let output = Command::new("node").arg("--version").output()?;
 
     if !output.status.success() {
         anyhow::bail!("Node.js is not installed or not in PATH");
     }
 
     let version_output = String::from_utf8_lossy(&output.stdout);
-    let version_str = version_output.trim().strip_prefix('v').unwrap_or(&version_output.trim());
-    
+    let version_str = version_output
+        .trim()
+        .strip_prefix('v')
+        .unwrap_or(&version_output.trim());
+
     // Parse major and minor version
     let parts: Vec<&str> = version_str.split('.').collect();
     if parts.len() < 2 {
         anyhow::bail!("Could not parse Node.js version: {}", version_str);
     }
 
-    let major: u32 = parts[0].parse().map_err(|_| anyhow::anyhow!("Invalid major version"))?;
-    let minor: u32 = parts[1].parse().map_err(|_| anyhow::anyhow!("Invalid minor version"))?;
+    let major: u32 = parts[0]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid major version"))?;
+    let minor: u32 = parts[1]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid minor version"))?;
 
     // Next.js 15 requires Node.js 18.18.0+
     let required_major = 18;
@@ -33,7 +38,10 @@ pub fn check_node_version() -> Result<()> {
     } else {
         println!("{}", "❌ Node.js version is too old".red());
         println!("   Current: v{}", version_str);
-        println!("   Required: v{}.{}.0 or higher", required_major, required_minor);
+        println!(
+            "   Required: v{}.{}.0 or higher",
+            required_major, required_minor
+        );
         println!();
         println!("Please update Node.js:");
         println!("   https://nodejs.org/");
@@ -95,8 +103,6 @@ fn install_pnpm_global() -> Result<()> {
 }
 
 pub fn install_dependencies_with_pnpm(project_path: &std::path::Path) -> Result<()> {
-    println!("{}", "📦 Installing dependencies with pnpm...".blue());
-
     let output = Command::new("pnpm")
         .arg("install")
         .current_dir(project_path)
@@ -118,13 +124,17 @@ pub fn install_dependencies_with_pnpm(project_path: &std::path::Path) -> Result<
 pub fn parse_node_version(version_str: &str) -> Result<(u32, u32)> {
     let clean_version = version_str.strip_prefix('v').unwrap_or(version_str);
     let parts: Vec<&str> = clean_version.split('.').collect();
-    
+
     if parts.len() < 2 {
         anyhow::bail!("Could not parse Node.js version: {}", clean_version);
     }
 
-    let major: u32 = parts[0].parse().map_err(|_| anyhow::anyhow!("Invalid major version"))?;
-    let minor: u32 = parts[1].parse().map_err(|_| anyhow::anyhow!("Invalid minor version"))?;
+    let major: u32 = parts[0]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid major version"))?;
+    let minor: u32 = parts[1]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid minor version"))?;
 
     Ok((major, minor))
 }
@@ -196,9 +206,9 @@ mod tests {
     fn test_node_version_edge_cases() {
         // Test boundary conditions
         assert!(!is_node_version_compatible(18, 17)); // Just below
-        assert!(is_node_version_compatible(18, 18));  // Exact match
-        assert!(is_node_version_compatible(18, 19));  // Just above
-        assert!(is_node_version_compatible(19, 0));   // Next major
+        assert!(is_node_version_compatible(18, 18)); // Exact match
+        assert!(is_node_version_compatible(18, 19)); // Just above
+        assert!(is_node_version_compatible(19, 0)); // Next major
     }
 
     #[test]

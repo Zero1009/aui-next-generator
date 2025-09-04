@@ -4,7 +4,7 @@ use colored::Colorize;
 use dialoguer::{Confirm, Input};
 
 use crate::config::ProjectConfig;
-use crate::validation::{check_node_version, check_and_install_pnpm};
+use crate::validation::{check_and_install_pnpm, check_node_version};
 
 #[derive(Parser)]
 #[command(name = "aui-next-gen")]
@@ -39,8 +39,8 @@ pub fn get_project_config(args: Cli) -> Result<ProjectConfig> {
         }
     };
 
-    let (install_deps, use_turbo) = if args.skip_install {
-        (false, false)
+    let (install_deps, use_turbo, use_react_query) = if args.skip_install {
+        (false, false, false)
     } else {
         check_node_version()?;
         check_and_install_pnpm()?;
@@ -59,16 +59,38 @@ pub fn get_project_config(args: Cli) -> Result<ProjectConfig> {
             false
         };
 
-        (install, turbo)
+        let use_react_query = Confirm::new()
+            .with_prompt("🔄 Add React Query (TanStack Query) for data fetching")
+            .default(true)
+            .interact()?;
+
+        (install, turbo, use_react_query)
     };
 
-    Ok(ProjectConfig::new(project_name, install_deps, use_turbo))
+    Ok(ProjectConfig::new(
+        project_name,
+        install_deps,
+        use_turbo,
+        use_react_query,
+    ))
 }
 
 pub fn print_success_message(config: &ProjectConfig) {
     println!("\n{}", "🎉 Project created successfully!".green().bold());
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".green());
-    println!("Next steps:");
+
+    // Show what was included
+    println!("✨ Included features:");
+    println!("   • Next.js 15 with App Router");
+    println!("   • Tailwind CSS v4 & TypeScript");
+    if config.use_turbo {
+        println!("   • Turbopack for faster development");
+    }
+    if config.use_react_query {
+        println!("   • React Query (TanStack Query)");
+    }
+
+    println!("\n📋 Next steps:");
     println!("   cd {}", config.name.blue());
     if !config.install_deps {
         println!("   pnpm install");

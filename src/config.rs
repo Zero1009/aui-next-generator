@@ -3,14 +3,16 @@ pub struct ProjectConfig {
     pub name: String,
     pub install_deps: bool,
     pub use_turbo: bool,
+    pub use_react_query: bool,
 }
 
 impl ProjectConfig {
-    pub fn new(name: String, install_deps: bool, use_turbo: bool) -> Self {
+    pub fn new(name: String, install_deps: bool, use_turbo: bool, use_react_query: bool) -> Self {
         Self {
             name,
             install_deps,
             use_turbo,
+            use_react_query,
         }
     }
 }
@@ -34,18 +36,19 @@ mod tests {
 
     #[test]
     fn test_project_config_new() {
-        let config = ProjectConfig::new("test-project".to_string(), true, false);
-        
+        let config = ProjectConfig::new("test-project".to_string(), true, false, true);
+
         assert_eq!(config.name, "test-project");
         assert_eq!(config.install_deps, true);
         assert_eq!(config.use_turbo, false);
+        assert_eq!(config.use_react_query, true);
     }
 
     #[test]
     fn test_project_config_clone() {
-        let config1 = ProjectConfig::new("original".to_string(), true, true);
+        let config1 = ProjectConfig::new("original".to_string(), true, true, false);
         let config2 = config1.clone();
-        
+
         assert_eq!(config1, config2);
     }
 
